@@ -108,7 +108,7 @@ IchigoJam と本機を接続し、シリアル受信（`INKEY()`）でマウス�
 
 ## クイックスタート (開発環境なしで書き込む場合)
 
-1. 本リポジトリの [Releases](https://www.google.com/search?q=../../releases&utm_source=gemini) ページから最新の `ijmouse_rp2040.uf2` をダウンロードします。
+1. 本リポジトリの [Releases](https://github.com/maenoh/ijmouse_rp2040/releases/tag/v1.0.0) ページから最新の `ijmouse_rp2040.uf2` をダウンロードします。
 2. RP2040-Zero の `BOOTSEL` ボタンを押しながら PC の USB ポートに接続します。
 3. PC 上で `RPI-RP2` という名前のドライブとして認識されます。
 4. ダウンロードした `ijmouse_rp2040.uf2` ファイルを `RPI-RP2` ドライブへドラッグ＆ドロップします。
