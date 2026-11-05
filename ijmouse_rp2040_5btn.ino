@@ -1,6 +1,6 @@
 /**
- * @file ijmouse_rp2040.ino
- * @brief RP2040-Zero USB 5-Button Mouse to UART Converter for IchigoJam (Base-32 Chars: 0-9, A-V). 3-Button Mouse is not supported.
+ * @file ijmouse_rp2040_5btn.ino
+ * @brief RP2040-Zero USB 5-Button Mouse to UART Converter for IchigoJam (3-Button Combinations + Exclusive Back/Forward as '8'/'9'). 3-Button Mouse is not supported.
  * @author Hideshi Maeno (maenoh)
  * @date 2026/11/5
  *
@@ -70,7 +70,7 @@ void setup() {
 
   Serial.println("========================================");
   Serial.println(" RP2040 USB 5-Button Mouse Converter    ");
-  Serial.println(" Mode: Base-32 Chars (0-9, A-V)         ");
+  Serial.println(" Mode: 3-Btn Combo + Back('8') / Fwd('9') ");
   Serial.println("========================================");
 
   // 3. PIO-USB ピン指定 (GP4: D+, GP5: D-)
@@ -121,7 +121,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
   acc_y = 0;
 }
 
-// HIDレポートデータ受信時
+// HIDレポートデータ受信時 (16bit軸対応8バイトパケット)
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
@@ -133,24 +133,34 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     int8_t  wheel = (int8_t)report[6];
 
     // ----------------------------------------------------------------
-    // 1. 5ボタン対応のボタン状態デコード (0 〜 31)
-    //    Bit0: 左(1), Bit1: 右(2), Bit2: 中(4), Bit3: 戻る(8), Bit4: 進む(16)
+    // 1. ボタン状態のデコード
+    //    - 戻る / 進む が押されている場合はそれぞれ独立して 8 または 16 を設定
+    //    - それ以外（左・右・中）は同時押しを考慮したビット組み合わせ（0 〜 7）
     // ----------------------------------------------------------------
     uint8_t current_buttons = 0;
-    if (raw_buttons & 0x01) current_buttons |= 0x01; // Left
-    if (raw_buttons & 0x02) current_buttons |= 0x02; // Right
-    if (raw_buttons & 0x04) current_buttons |= 0x04; // Middle
-    if (raw_buttons & 0x08) current_buttons |= 0x08; // Back (4th) -> 値: 8
-    if (raw_buttons & 0x10) current_buttons |= 0x10; // Forward (5th) -> 値: 16
 
-    // 状態が変化した時のみ送信
+    if (raw_buttons & 0x08) {
+      current_buttons = 8;  // 戻るボタン（手前）
+    } else if (raw_buttons & 0x10) {
+      current_buttons = 16; // 進むボタン（先端）
+    } else {
+      // 3ボタン（左・右・中）は同時押しを許容
+      if (raw_buttons & 0x01) current_buttons |= 0x01; // Left (bit0)
+      if (raw_buttons & 0x02) current_buttons |= 0x02; // Right (bit1)
+      if (raw_buttons & 0x04) current_buttons |= 0x04; // Middle (bit2)
+    }
+
+    // 状態が変化した時のみ文字コードを1バイト送信
     if (current_buttons != prev_buttons) {
       char send_char;
-      if (current_buttons < 10) {
-        send_char = '0' + current_buttons;          // 0 〜 9 ('0'〜'9')
+      if (current_buttons <= 7) {
+        send_char = '0' + current_buttons;          // '0' 〜 '7' (3ボタンの組み合わせ)
+      } else if (current_buttons == 8) {
+        send_char = '8';                            // '8' (戻るボタン)
+      } else if (current_buttons == 16) {
+        send_char = '9';                            // '9' (進むボタン)
       } else {
-        send_char = 'A' + (current_buttons - 10);   // 10 〜 31 ('A'〜'V')
-        // ※ 戻る(8) は '8'、進む(16) は 'G' になります
+        send_char = '0';
       }
       
       Serial1.write(send_char);
@@ -182,7 +192,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     }
 
     // ----------------------------------------------------------------
-    // 3. ホイール操作判定
+    // 3. ホイール操作判定 (PageUp / PageDown)
     // ----------------------------------------------------------------
     if (wheel > 0) {
       Serial1.write(PAGE_UP);
